@@ -1,0 +1,8 @@
+celery
+redis
+sqlalchemy
+psycopg2-binary
+pgvector
+requests
+PyPDF2
+langchain-text-splitters
