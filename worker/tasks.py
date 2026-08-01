@@ -6,7 +6,7 @@ from database import SessionLocal
 from models import Document, DocumentChunk
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-OLLAMA_API_URL = os.getenv("OLLAMA_API_URL", "http://ollama:11434/api/embeddings")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "nomic-embed-text")
 
 def extract_text(filepath: str) -> str:
@@ -27,7 +27,7 @@ def extract_text(filepath: str) -> str:
 
 def get_embedding(text: str) -> list[float]:
     response = requests.post(
-        OLLAMA_API_URL,
+        f"{OLLAMA_BASE_URL}/api/embeddings",
         json={"model": OLLAMA_MODEL, "prompt": text}
     )
     response.raise_for_status()

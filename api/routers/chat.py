@@ -1,3 +1,4 @@
+import os
 import json
 import requests
 from typing import Optional, List
@@ -20,8 +21,9 @@ class SessionCreate(BaseModel):
     title: str
 
 def get_embedding(text: str):
+    OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
     response = requests.post(
-        "http://ollama:11434/api/embeddings",
+        f"{OLLAMA_BASE_URL}/api/embeddings",
         json={"model": "nomic-embed-text", "prompt": text}
     )
     response.raise_for_status()
@@ -102,9 +104,10 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db), current_user
         history_text += f"{msg.role.capitalize()}: {msg.content}\n"
     
     def generate_response():
+        OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
         prompt = f"Context from documents:\n{context}\n\nPast Chat History:\n{history_text}\n\nUser: {request.query}\n\nAssistant:"
         response = requests.post(
-            "http://ollama:11434/api/generate",
+            f"{OLLAMA_BASE_URL}/api/generate",
             json={"model": "llama3.1", "prompt": prompt, "stream": True},
             stream=True
         )
