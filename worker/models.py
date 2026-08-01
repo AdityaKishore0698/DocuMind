@@ -8,6 +8,7 @@ class Document(Base):
     __tablename__ = "documents"
 
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer)
     filename = Column(String, index=True)
     status = Column(String, default="pending")  # pending, processing, completed, failed
     

@@ -7,3 +7,7 @@ python-multipart
 celery
 redis
 requests
+bcrypt
+python-jose[cryptography]
+pytest
+httpx

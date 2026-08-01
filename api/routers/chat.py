@@ -1,16 +1,23 @@
 import json
 import requests
-from fastapi import APIRouter, Depends
+from typing import Optional, List
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from core.database import get_db
-from models.document import DocumentChunk
+from models.document import DocumentChunk, Document
+from models.user import User, ChatSession, ChatMessage
+from core.dependencies import get_current_user
 
 router = APIRouter()
 
 class ChatRequest(BaseModel):
     query: str
+    session_id: Optional[int] = None
+
+class SessionCreate(BaseModel):
+    title: str
 
 def get_embedding(text: str):
     response = requests.post(
@@ -20,27 +27,103 @@ def get_embedding(text: str):
     response.raise_for_status()
     return response.json().get("embedding")
 
+@router.post("/sessions")
+def create_session(session: SessionCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    db_session = ChatSession(user_id=current_user.id, title=session.title)
+    db.add(db_session)
+    db.commit()
+    db.refresh(db_session)
+    return {"id": db_session.id, "title": db_session.title}
+
+@router.get("/sessions")
+def list_sessions(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    sessions = db.query(ChatSession).filter(ChatSession.user_id == current_user.id).order_by(ChatSession.created_at.desc()).all()
+    return [{"id": s.id, "title": s.title, "created_at": s.created_at} for s in sessions]
+
+@router.put("/sessions/{session_id}")
+def rename_session(session_id: int, session: SessionCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    db_session = db.query(ChatSession).filter(ChatSession.id == session_id, ChatSession.user_id == current_user.id).first()
+    if not db_session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    db_session.title = session.title
+    db.commit()
+    return {"id": db_session.id, "title": db_session.title}
+
+@router.get("/sessions/{session_id}/messages")
+def get_session_messages(session_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    db_session = db.query(ChatSession).filter(ChatSession.id == session_id, ChatSession.user_id == current_user.id).first()
+    if not db_session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return [{"role": m.role, "content": m.content} for m in db_session.messages]
+
+@router.delete("/sessions/{session_id}")
+def delete_session(session_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    db_session = db.query(ChatSession).filter(ChatSession.id == session_id, ChatSession.user_id == current_user.id).first()
+    if not db_session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    db.delete(db_session)
+    db.commit()
+    return {"message": "Session deleted"}
+
 @router.post("/chat")
-async def chat(request: ChatRequest, db: Session = Depends(get_db)):
+async def chat(request: ChatRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    session_id = request.session_id
+    if not session_id:
+        db_session = ChatSession(user_id=current_user.id, title=request.query[:30])
+        db.add(db_session)
+        db.commit()
+        db.refresh(db_session)
+        session_id = db_session.id
+    else:
+        db_session = db.query(ChatSession).filter(ChatSession.id == session_id, ChatSession.user_id == current_user.id).first()
+        if not db_session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+    # Save user message
+    user_message = ChatMessage(session_id=session_id, role="user", content=request.query)
+    db.add(user_message)
+    db.commit()
+
     query_embedding = get_embedding(request.query)
     
-    results = db.query(DocumentChunk).order_by(
+    # RAG Vector Search: Only search chunks from documents belonging to the current user!
+    results = db.query(DocumentChunk).join(Document).filter(
+        Document.user_id == current_user.id
+    ).order_by(
         DocumentChunk.embedding.cosine_distance(query_embedding)
     ).limit(5).all()
     
     context = "\n\n".join([chunk.content for chunk in results])
     
+    # Load past history
+    history = db.query(ChatMessage).filter(ChatMessage.session_id == session_id).order_by(ChatMessage.created_at).all()
+    history_text = ""
+    for msg in history[:-1]: # exclude the current one we just added
+        history_text += f"{msg.role.capitalize()}: {msg.content}\n"
+    
     def generate_response():
-        prompt = f"Context:\n{context}\n\nQuery:\n{request.query}\n\nResponse:"
+        prompt = f"Context from documents:\n{context}\n\nPast Chat History:\n{history_text}\n\nUser: {request.query}\n\nAssistant:"
         response = requests.post(
             "http://ollama:11434/api/generate",
-            json={"model": "llama3", "prompt": prompt, "stream": True},
+            json={"model": "llama3.1", "prompt": prompt, "stream": True},
             stream=True
         )
-        for line in response.iter_lines():
-            if line:
-                data = json.loads(line)
-                if not data.get("done"):
-                    yield data.get("response", "")
-                
-    return StreamingResponse(generate_response(), media_type="text/plain")
+        
+        full_response = ""
+        try:
+            for line in response.iter_lines():
+                if line:
+                    data = json.loads(line)
+                    if not data.get("done"):
+                        piece = data.get("response", "")
+                        full_response += piece
+                        yield piece
+        finally:
+            if full_response:
+                # Save assistant message to DB even if aborted early
+                assistant_message = ChatMessage(session_id=session_id, role="assistant", content=full_response)
+                db.add(assistant_message)
+                db.commit()
+
+    # Pass the session_id in headers so the frontend knows what session was created
+    return StreamingResponse(generate_response(), media_type="text/plain", headers={"X-Session-ID": str(session_id)})

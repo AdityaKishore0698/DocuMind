@@ -1,7 +1,8 @@
 from fastapi import FastAPI
 from core.database import engine, Base
 import models.document
-from routers import document, chat
+import models.user
+from routers import document, chat, auth
 
 from sqlalchemy import text
 
@@ -11,11 +12,12 @@ with engine.connect() as conn:
 
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="Multimodal RAG Engine API")
+app = FastAPI(title="DocuMind API")
 
-app.include_router(document.router, tags=["document"])
-app.include_router(chat.router, tags=["chat"])
+app.include_router(auth.router, tags=["auth"], prefix="/auth")
+app.include_router(document.router, tags=["document"], prefix="/document")
+app.include_router(chat.router, tags=["chat"], prefix="/chat")
 
 @app.get("/")
 def read_root():
-    return {"message": "Multimodal RAG Engine API is running"}
+    return {"message": "DocuMind API is running"}

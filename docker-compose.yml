@@ -32,7 +32,11 @@ services:
       retries: 5
 
   api:
-    build: ./api
+    build: 
+      context: ./api
+      args:
+        HTTP_PROXY: http://172.31.2.3:8080
+        HTTPS_PROXY: http://172.31.2.3:8080
     container_name: rag_api
     ports:
       - "8000:8000"
@@ -53,7 +57,11 @@ services:
         condition: service_healthy
 
   worker:
-    build: ./worker
+    build: 
+      context: ./worker
+      args:
+        HTTP_PROXY: http://172.31.2.3:8080
+        HTTPS_PROXY: http://172.31.2.3:8080
     container_name: rag_worker
     volumes:
       - ./worker:/app
@@ -72,10 +80,15 @@ services:
         condition: service_healthy
 
   ui:
-    build: ./ui
+    build:
+      context: ./ui
+      args:
+        HTTP_PROXY: http://172.31.2.3:8080
+        HTTPS_PROXY: http://172.31.2.3:8080
     container_name: rag_ui
     ports:
       - "8501:8501"
+      - "80:8501"
     volumes:
       - ./ui:/app
     environment:
