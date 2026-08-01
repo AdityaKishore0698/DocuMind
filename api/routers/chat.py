@@ -108,7 +108,7 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db), current_user
         prompt = f"Context from documents:\n{context}\n\nPast Chat History:\n{history_text}\n\nUser: {request.query}\n\nAssistant:"
         response = requests.post(
             f"{OLLAMA_BASE_URL}/api/generate",
-            json={"model": "llama3.1", "prompt": prompt, "stream": True},
+            json={"model": "llama3.1:8b", "prompt": prompt, "stream": True},
             stream=True
         )
         
