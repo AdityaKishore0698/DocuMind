@@ -15,3 +15,48 @@ DocuMind is an advanced Multimodal Retrieval-Augmented Generation (RAG) engine b
 * **Database:** PostgreSQL (with `pgvector` extension)
 * **Task Queue:** Celery & Redis
 * **AI Engine:** Ollama (Llama 3.1 8B, Nomic-Embed-Text)
+
+## Architecture
+
+```mermaid
+graph TD
+    subgraph AWS Cloud [AWS EC2 Instance]
+        UI[Streamlit UI]
+        API[FastAPI Backend]
+        Worker[Celery Worker]
+        DB[(PostgreSQL + pgvector)]
+        Redis[(Redis Broker)]
+        
+        UI <-->|REST / SSE| API
+        API <-->|SQL| DB
+        API -->|Task| Redis
+        Redis -->|Consume| Worker
+        Worker <-->|SQL| DB
+    end
+
+    subgraph Lab Network [On-Premise GPU Server]
+        Ollama[Ollama AI Engine]
+        Llama[Llama 3.1 8B]
+        Embed[nomic-embed-text]
+        Ollama --- Llama
+        Ollama --- Embed
+    end
+    
+    API <==>|Reverse SSH Tunnel| Ollama
+    Worker <==>|Reverse SSH Tunnel| Ollama
+    
+    User((User Browser)) <-->|HTTP:80| UI
+```
+
+## Screenshots
+
+*(Add your screenshots here by replacing the placeholder links)*
+
+### 1. Chat Interface
+![Chat Interface](docs/chat_interface.png)
+
+### 2. Knowledge Base & Uploads
+![Knowledge Base](docs/knowledge_base.png)
+
+### 3. Login / Registration
+![Login Screen](docs/login_screen.png)
