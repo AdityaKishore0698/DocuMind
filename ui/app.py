@@ -146,7 +146,7 @@ with st.sidebar:
 
 # Main Chat Header (Management for Active Chat)
 if st.session_state.session_id:
-    head_cols = st.columns([6, 1, 1])
+    head_cols = st.columns([6, 2, 2])
     with head_cols[1].popover("✏️ Rename"):
         new_title = st.text_input("New Title", label_visibility="collapsed", key="rename_top")
         if st.button("Save", key="save_top"):
