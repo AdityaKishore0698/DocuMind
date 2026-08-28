@@ -6,6 +6,8 @@ import {
   LogOut,
   MessageSquarePlus,
   MessageSquare,
+  PanelLeftClose,
+  PanelLeftOpen,
   Pencil,
   Trash2,
   Upload,
@@ -35,6 +37,9 @@ interface Props {
   sessionsLoading: boolean;
   activeSessionId: number | null;
   open: boolean;
+  /** Desktop (>= md) only: render as a compact icon rail. */
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
   onClose: () => void;
   onNewChat: () => void;
   onOpenSession: (id: number) => void;
@@ -54,6 +59,8 @@ export default function Sidebar({
   sessionsLoading,
   activeSessionId,
   open,
+  collapsed,
+  onToggleCollapsed,
   onClose,
   onNewChat,
   onOpenSession,
@@ -177,16 +184,28 @@ export default function Sidebar({
         aria-label="Documents and conversations"
         className={cn(
           "fixed inset-y-0 left-0 z-30 flex w-[22rem] max-w-[85vw] flex-col bg-md-surface-container-low",
-          "transition-transform duration-[250ms] ease-[cubic-bezier(0.2,0,0,1)]",
-          "md:static md:z-auto md:w-80 md:max-w-none md:translate-x-0 md:border-r md:border-md-outline-variant",
+          "transition-[transform,width] duration-[250ms] ease-[cubic-bezier(0.2,0,0,1)]",
+          "md:static md:z-auto md:max-w-none md:translate-x-0 md:border-r md:border-md-outline-variant",
           open ? "translate-x-0 elev-2" : "-translate-x-full",
+          collapsed ? "md:w-[4.5rem]" : "md:w-80",
         )}
       >
+        {/* Full sidebar — always shown on mobile; on desktop only when expanded */}
+        <div className={cn("flex min-h-0 flex-1 flex-col", collapsed && "md:hidden")}>
         <div className="flex items-center justify-between px-4 pb-2 pt-4">
           <span className="t-title-l">DocuMind</span>
-          <IconButton label="Close menu" className="md:hidden" onClick={onClose}>
-            <X size={20} />
-          </IconButton>
+          <div className="flex items-center gap-1">
+            <IconButton
+              label="Collapse sidebar"
+              className="hidden md:inline-grid"
+              onClick={onToggleCollapsed}
+            >
+              <PanelLeftClose size={20} />
+            </IconButton>
+            <IconButton label="Close menu" className="md:hidden" onClick={onClose}>
+              <X size={20} />
+            </IconButton>
+          </div>
         </div>
 
         <div className="flex-1 space-y-7 overflow-y-auto px-3 py-3 scrollbar-thin">
@@ -357,6 +376,56 @@ export default function Sidebar({
             <UserX size={18} /> Delete account
           </button>
         </div>
+        </div>
+
+        {/* Collapsed icon rail — desktop only */}
+        {collapsed && (
+          <div className="hidden min-h-0 flex-1 flex-col md:flex">
+            <div className="flex flex-col items-center gap-1 px-2 pt-4">
+              <IconButton label="Expand sidebar" onClick={onToggleCollapsed}>
+                <PanelLeftOpen size={20} />
+              </IconButton>
+              <IconButton label="New chat" onClick={onNewChat}>
+                <MessageSquarePlus size={20} />
+              </IconButton>
+              <IconButton
+                label="Upload PDF or TXT"
+                loading={uploading}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Upload size={20} />
+              </IconButton>
+            </div>
+
+            <div className="mx-auto my-2 h-px w-8 bg-md-outline-variant" />
+
+            <ul
+              aria-label="Conversations"
+              className="flex-1 space-y-1 overflow-y-auto px-2 py-1 scrollbar-thin"
+            >
+              {sessions.map((sn) => (
+                <li key={sn.id}>
+                  <IconButton
+                    label={sn.title}
+                    onClick={() => onOpenSession(sn.id)}
+                    className={cn(
+                      activeSessionId === sn.id &&
+                        "bg-md-secondary-container text-md-on-secondary-container",
+                    )}
+                  >
+                    <MessageSquare size={18} />
+                  </IconButton>
+                </li>
+              ))}
+            </ul>
+
+            <div className="flex flex-col items-center border-t border-md-outline-variant p-2">
+              <IconButton label="Sign out" onClick={signOut}>
+                <LogOut size={18} />
+              </IconButton>
+            </div>
+          </div>
+        )}
       </nav>
 
       <Dialog

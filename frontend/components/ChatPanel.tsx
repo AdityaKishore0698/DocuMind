@@ -14,6 +14,7 @@ import { useAuth } from "@/lib/auth-context";
 import { ApiError, ChatMessageItem, streamChat } from "@/lib/api";
 import { IconButton } from "@/components/ui/IconButton";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { cn } from "@/lib/cn";
 
 interface Props {
@@ -112,9 +113,10 @@ export default function ChatPanel({
         <IconButton label="Open menu" className="md:hidden" onClick={onToggleDrawer}>
           <Menu size={20} />
         </IconButton>
-        <h1 className="min-w-0 truncate t-title-m">
+        <h1 className="min-w-0 flex-1 truncate t-title-m">
           {activeSessionId ? "Conversation" : "New chat"}
         </h1>
+        <ThemeToggle className="-mr-1 shrink-0" />
       </header>
 
       <div ref={scrollRef} className="flex-1 overflow-x-hidden overflow-y-auto scrollbar-thin">

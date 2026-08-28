@@ -20,6 +20,31 @@ export default function AppShell() {
   const [messages, setMessages] = useState<ChatMessageItem[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // Desktop-only: the permanent sidebar can be collapsed to an icon rail.
+  // Mobile keeps the modal-drawer behaviour untouched.
+  const [railCollapsed, setRailCollapsed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.localStorage.getItem("documind-sidebar-collapsed") === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleRail = useCallback(() => {
+    setRailCollapsed((v) => {
+      const next = !v;
+      try {
+        window.localStorage.setItem(
+          "documind-sidebar-collapsed",
+          next ? "1" : "0",
+        );
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, []);
 
   const refreshSessions = useCallback(async () => {
     if (!token) return;
@@ -83,6 +108,8 @@ export default function AppShell() {
         sessionsLoading={sessionsLoading}
         activeSessionId={activeSessionId}
         open={drawerOpen}
+        collapsed={railCollapsed}
+        onToggleCollapsed={toggleRail}
         onClose={() => setDrawerOpen(false)}
         onNewChat={newChat}
         onOpenSession={openSession}
