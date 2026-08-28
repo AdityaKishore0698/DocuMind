@@ -7,6 +7,8 @@ import {
   useRef,
   useState,
 } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useAuth } from "@/lib/auth-context";
 import { ApiError, ChatMessageItem, streamChat } from "@/lib/api";
 
@@ -216,13 +218,19 @@ function Message({
         {isUser ? "You" : "AI"}
       </div>
       <div
-        className={`max-w-[85%] whitespace-pre-wrap break-words rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+        className={`max-w-[85%] break-words rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
           isUser
-            ? "bg-primary text-primary-foreground"
+            ? "whitespace-pre-wrap bg-primary text-primary-foreground"
             : "border border-border bg-surface"
         }`}
       >
-        {content}
+        {isUser ? (
+          content
+        ) : (
+          <div className="markdown">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+          </div>
+        )}
         {pending && (
           <span className="animate-blink ml-0.5 inline-block">▋</span>
         )}
