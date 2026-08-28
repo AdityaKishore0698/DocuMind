@@ -95,7 +95,7 @@ keeping true async processing.
 | **Message Broker** | **Upstash Redis** over **TLS** (`rediss://`) — Celery broker + result backend |
 | **Database & Storage** | **Supabase PostgreSQL** with the **`pgvector`** extension, and **Supabase Object Storage** (`documents` bucket) |
 | **LLM / Embeddings** | **Google Gemini API** — `gemini-3.6-flash` (chat), `gemini-embedding-2` (768-dim embeddings), via the `google-genai` SDK |
-| **Auth** | Supabase Auth — email + password with a 6-digit email OTP, and Google OAuth 2.0. FastAPI verifies the Supabase access token (JWKS/ES256) and upserts a local profile row; strict `user_id` scoping on every query |
+| **Auth** | Supabase Auth — email + password with email-link confirmation, and Google OAuth 2.0. FastAPI verifies the Supabase access token (JWKS/ES256) and upserts a local profile row; strict `user_id` scoping on every query |
 | **CI** | GitHub Actions — pytest against a `pgvector` service container on every push / PR |
 
 > `ui/` holds the original Streamlit prototype, kept only for reference. `frontend/` is the current UI.
@@ -104,12 +104,13 @@ keeping true async processing.
 
 ## Features
 
-* **Multi-tenant security** — Supabase Auth (email + OTP, Google OAuth); the API verifies the Supabase token and filters every document/chat query by `user_id`.
-* **Cascading deletion** — deleting your account purges all documents, vector embeddings, chat sessions, and the underlying Storage objects.
+* **Multi-tenant security** — Supabase Auth (email + password with email confirmation, Google OAuth); the API verifies the Supabase token and filters every document/chat query by `user_id`.
+* **Cascading deletion** — deleting your account purges all documents, vector embeddings, chat sessions, and the underlying Storage objects, plus the Supabase Auth user.
 * **Real-time streaming** — token-by-token chat responses with graceful mid-stream stop.
 * **Markdown answers** — assistant messages render Markdown (headings, bold, lists, code, tables) via `react-markdown`.
 * **Semantic search** — `pgvector` cosine similarity over document chunks.
 * **Async ingestion** — PDF parsing + embedding runs off the request path on the Celery worker.
+* **Material 3 UI** — a Tailwind v4 design-token system with light/dark theme toggle (persisted, no flash on load) and a desktop sidebar that collapses to an icon rail; the mobile navigation drawer is unchanged.
 
 ---
 
@@ -137,7 +138,7 @@ keeping true async processing.
 ### One-time Supabase Auth setup
 
 1. **Authentication → Sign In / Providers → Email**: enable it and turn on **Confirm email**.
-2. **Authentication → Email Templates**: edit *Confirm signup* and *Magic Link / Email OTP* to render `{{ .Token }}` (sends the 6-digit code instead of a link).
+2. **Authentication → Email Templates → Confirm signup**: keep the default `{{ .ConfirmationURL }}` link — the app uses the standard email-confirmation-link flow (no 6-digit code). After the user clicks it they are returned to the app and land on the sign-in screen.
 3. **Google Cloud Console**: create an OAuth 2.0 *Web* client. Redirect URI: `https://<ref>.supabase.co/auth/v1/callback`. JS origins: your Vercel URL + `http://localhost:3000`.
 4. **Authentication → Providers → Google**: paste the client ID + secret.
 5. **Authentication → URL Configuration**: Site URL = the Vercel URL; add `http://localhost:3000` to the redirect allow-list.
