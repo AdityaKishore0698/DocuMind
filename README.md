@@ -95,7 +95,7 @@ keeping true async processing.
 | **Message Broker** | **Upstash Redis** over **TLS** (`rediss://`) — Celery broker + result backend |
 | **Database & Storage** | **Supabase PostgreSQL** with the **`pgvector`** extension, and **Supabase Object Storage** (`documents` bucket) |
 | **LLM / Embeddings** | **Google Gemini API** — `gemini-3.6-flash` (chat), `gemini-embedding-2` (768-dim embeddings), via the `google-genai` SDK |
-| **Auth** | JWT (`python-jose`) + bcrypt password hashing; strict `user_id` scoping on every query |
+| **Auth** | Supabase Auth — email + password with a 6-digit email OTP, and Google OAuth 2.0. FastAPI verifies the Supabase access token (JWKS/ES256) and upserts a local profile row; strict `user_id` scoping on every query |
 | **CI** | GitHub Actions — pytest against a `pgvector` service container on every push / PR |
 
 > `ui/` holds the original Streamlit prototype, kept only for reference. `frontend/` is the current UI.
@@ -104,7 +104,7 @@ keeping true async processing.
 
 ## Features
 
-* **Multi-tenant security** — JWT auth, bcrypt hashing; every document/chat query is filtered by `user_id`.
+* **Multi-tenant security** — Supabase Auth (email + OTP, Google OAuth); the API verifies the Supabase token and filters every document/chat query by `user_id`.
 * **Cascading deletion** — deleting your account purges all documents, vector embeddings, chat sessions, and the underlying Storage objects.
 * **Real-time streaming** — token-by-token chat responses with graceful mid-stream stop.
 * **Markdown answers** — assistant messages render Markdown (headings, bold, lists, code, tables) via `react-markdown`.
@@ -121,10 +121,9 @@ keeping true async processing.
 | --- | --- |
 | `DATABASE_URL` | Supabase Postgres connection string (pooled / port 6543) |
 | `REDIS_URL` | Upstash Redis URL (`rediss://…`) — broker + backend |
-| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | Supabase project + service-role key for Storage |
+| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | Supabase project URL + service-role key — used for Storage, account deletion, and verifying auth tokens (JWKS derived from the URL) |
 | `GEMINI_API_KEY` | Google AI Studio API key |
 | `CHAT_MODEL` / `EMBEDDING_MODEL` | `gemini-3.6-flash` / `gemini-embedding-2` |
-| `SECRET_KEY` | JWT signing key |
 | `FRONTEND_ORIGINS` | CORS allow-list — set to the Vercel URL (`*` for local dev only) |
 
 **Frontend** — `frontend/.env.local`:
@@ -132,6 +131,18 @@ keeping true async processing.
 | Variable | Purpose | Default |
 | --- | --- | --- |
 | `NEXT_PUBLIC_API_URL` | Base URL of the deployed FastAPI backend | `http://localhost:8000` |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL (Project Settings → API) | — |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon / publishable key | — |
+
+### One-time Supabase Auth setup
+
+1. **Authentication → Sign In / Providers → Email**: enable it and turn on **Confirm email**.
+2. **Authentication → Email Templates**: edit *Confirm signup* and *Magic Link / Email OTP* to render `{{ .Token }}` (sends the 6-digit code instead of a link).
+3. **Google Cloud Console**: create an OAuth 2.0 *Web* client. Redirect URI: `https://<ref>.supabase.co/auth/v1/callback`. JS origins: your Vercel URL + `http://localhost:3000`.
+4. **Authentication → Providers → Google**: paste the client ID + secret.
+5. **Authentication → URL Configuration**: Site URL = the Vercel URL; add `http://localhost:3000` to the redirect allow-list.
+6. *(Recommended)* **Authentication → SMTP**: plug in a real provider (e.g. Resend) — the built-in email is rate-limited to a few sends/hour.
+7. Run `scripts/init_db.sql` once against the Supabase database (**destructive** — it drops and recreates every table for the auth-schema change).
 
 `.env` and `.env*.local` are git-ignored; only the `.example` templates are committed.
 
@@ -151,6 +162,7 @@ docker run --rm -p 8000:8000 --env-file .env documind
 
 # 2. Frontend
 cd frontend
+cp .env.example .env.local       # fill in NEXT_PUBLIC_SUPABASE_URL / _ANON_KEY
 npm install
 npm run dev                      # http://localhost:3000
 ```
