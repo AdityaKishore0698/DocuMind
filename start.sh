@@ -23,9 +23,12 @@ echo "start.sh: starting FastAPI (uvicorn) on :8000"
 PYTHONPATH=/app/api uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1 &
 api_pid=$!
 
+_shutting_down=0
 shutdown() {
+    [ "$_shutting_down" = 1 ] && return
+    _shutting_down=1
     trap - TERM INT
-    echo "start.sh: stop signal received — terminating worker ($worker_pid) and api ($api_pid)"
+    echo "start.sh: terminating worker ($worker_pid) and api ($api_pid)"
     kill -TERM "$worker_pid" "$api_pid" 2>/dev/null || true
     wait "$worker_pid" 2>/dev/null || true
     wait "$api_pid" 2>/dev/null || true
