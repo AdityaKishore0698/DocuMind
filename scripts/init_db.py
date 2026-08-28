@@ -1,6 +1,7 @@
-"""Create the DocuMind tables and the pgvector extension in the target database.
+"""Reset the DocuMind schema in the database at DATABASE_URL.
 
-Reads DATABASE_URL from the environment (load .env first). Idempotent.
+DESTRUCTIVE: drops and recreates every table (the Supabase Auth switch changed
+the `users` table). Reads DATABASE_URL from the environment.
 
     set -a && source .env && set +a
     python scripts/init_db.py
@@ -20,6 +21,8 @@ import models.document  # noqa: E402,F401  registers documents / document_chunks
 
 
 def main() -> None:
+    print("Dropping and recreating all DocuMind tables ...")
+    Base.metadata.drop_all(bind=engine)
     with engine.connect() as conn:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         conn.commit()

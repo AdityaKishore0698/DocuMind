@@ -56,10 +56,8 @@ services:
       - fromGroup: documind-shared
       - key: CHAT_MODEL
         value: gemini-3.6-flash
-      # Long random signing key for JWTs — generated and stored by Render.
-      - key: SECRET_KEY
-        generateValue: true
       # Comma-separated allowed origins — set to your Vercel frontend URL.
+      # (Auth tokens are verified against Supabase; no signing key needed here.)
       - key: FRONTEND_ORIGINS
         sync: false
 

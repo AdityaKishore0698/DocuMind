@@ -1,58 +1,65 @@
 -- DocuMind schema — run once against the Supabase database.
 --
--- Easiest: paste this into the Supabase dashboard -> SQL Editor -> Run.
--- Or:      psql "$DATABASE_URL" -f scripts/init_db.sql
+--   Supabase dashboard -> SQL Editor -> paste -> Run
+--   or:  psql "$DATABASE_URL" -f scripts/init_db.sql
 --
--- Generated from the SQLAlchemy models (api/models/*.py); equivalent to
--- Base.metadata.create_all(). Safe to re-run.
+-- DESTRUCTIVE: this drops and recreates every table. The move to Supabase Auth
+-- changed the `users` table shape and existing accounts have no Supabase
+-- identity, so a reset is expected (see the plan / README).
+--
+-- Matches the SQLAlchemy models in api/models/*.py.
+
+DROP TABLE IF EXISTS chat_messages, chat_sessions, document_chunks, documents, users CASCADE;
 
 CREATE EXTENSION IF NOT EXISTS vector;
 
-CREATE TABLE IF NOT EXISTS users (
-    id              SERIAL PRIMARY KEY,
-    username        VARCHAR,
-    email           VARCHAR,
-    hashed_password VARCHAR
+-- Local profile, keyed to a Supabase Auth user by `supabase_uid`.
+CREATE TABLE users (
+    id           SERIAL PRIMARY KEY,
+    supabase_uid TEXT NOT NULL,
+    email        TEXT,
+    username     TEXT,
+    created_at   TIMESTAMPTZ DEFAULT now()
 );
-CREATE UNIQUE INDEX IF NOT EXISTS ix_users_username ON users (username);
-CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email    ON users (email);
-CREATE INDEX        IF NOT EXISTS ix_users_id       ON users (id);
+CREATE UNIQUE INDEX ix_users_supabase_uid ON users (supabase_uid);
+CREATE INDEX        ix_users_email         ON users (email);
+CREATE INDEX        ix_users_id            ON users (id);
 
-CREATE TABLE IF NOT EXISTS chat_sessions (
+CREATE TABLE chat_sessions (
     id         SERIAL PRIMARY KEY,
     user_id    INTEGER REFERENCES users (id),
-    title      VARCHAR,
+    title      TEXT,
     created_at TIMESTAMPTZ DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS ix_chat_sessions_id ON chat_sessions (id);
+CREATE INDEX ix_chat_sessions_id ON chat_sessions (id);
 
-CREATE TABLE IF NOT EXISTS chat_messages (
+CREATE TABLE chat_messages (
     id         SERIAL PRIMARY KEY,
     session_id INTEGER REFERENCES chat_sessions (id),
-    role       VARCHAR,
-    content    VARCHAR,
+    role       TEXT,
+    content    TEXT,
     created_at TIMESTAMPTZ DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS ix_chat_messages_id ON chat_messages (id);
+CREATE INDEX ix_chat_messages_id ON chat_messages (id);
 
-CREATE TABLE IF NOT EXISTS documents (
+CREATE TABLE documents (
     id       SERIAL PRIMARY KEY,
     user_id  INTEGER REFERENCES users (id),
-    filename VARCHAR,
-    status   VARCHAR
+    filename TEXT,
+    status   TEXT
 );
-CREATE INDEX IF NOT EXISTS ix_documents_id       ON documents (id);
-CREATE INDEX IF NOT EXISTS ix_documents_filename ON documents (filename);
+CREATE INDEX ix_documents_id       ON documents (id);
+CREATE INDEX ix_documents_filename ON documents (filename);
 
-CREATE TABLE IF NOT EXISTS document_chunks (
+CREATE TABLE document_chunks (
     id          SERIAL PRIMARY KEY,
     document_id INTEGER REFERENCES documents (id),
-    content     VARCHAR,
+    content     TEXT,
     embedding   VECTOR(768)
 );
-CREATE INDEX IF NOT EXISTS ix_document_chunks_id ON document_chunks (id);
+CREATE INDEX ix_document_chunks_id ON document_chunks (id);
 
 -- Recommended (not created by the app): approximate-NN index for cosine search.
 -- Add it once the table has data.
--- CREATE INDEX IF NOT EXISTS ix_document_chunks_embedding
+-- CREATE INDEX ix_document_chunks_embedding
 --     ON document_chunks USING hnsw (embedding vector_cosine_ops);

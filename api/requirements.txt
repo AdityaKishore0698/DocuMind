@@ -8,7 +8,6 @@ celery
 redis
 google-genai
 supabase
-bcrypt
-python-jose[cryptography]
+pyjwt[cryptography]
 pytest
 httpx

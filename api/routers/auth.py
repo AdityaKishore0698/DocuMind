@@ -1,51 +1,45 @@
-from datetime import timedelta
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
+
 from core.database import get_db
-from core.auth import verify_password, get_password_hash, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
+from core.dependencies import get_current_user
+from core.storage import STORAGE_BUCKET, get_supabase, object_key
+from models.document import Document
 from models.user import User
-from pydantic import BaseModel
 
 router = APIRouter()
 
-class UserCreate(BaseModel):
-    username: str
-    email: str
-    password: str
+# Registration and login are handled entirely by Supabase Auth on the client
+# (email + password with an emailed 6-digit code, or Google OAuth). The API only
+# verifies the resulting access token (see core/dependencies.py).
 
-@router.post("/register")
-def register_user(user: UserCreate, db: Session = Depends(get_db)):
-    db_user = db.query(User).filter(User.username == user.username).first()
-    if db_user:
-        raise HTTPException(status_code=400, detail="Username already registered")
-    
-    hashed_password = get_password_hash(user.password)
-    new_user = User(username=user.username, email=user.email, hashed_password=hashed_password)
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-    return {"message": "User registered successfully"}
-
-@router.post("/token")
-def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username == form_data.username).first()
-    if not user or not verify_password(form_data.password, user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user.username}, expires_delta=access_token_expires
-    )
-    return {"access_token": access_token, "token_type": "bearer"}
-
-from core.dependencies import get_current_user
 
 @router.delete("/profile")
-def delete_profile(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def delete_profile(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Delete the account: Storage objects, DB rows, and the Supabase auth user."""
+    supabase = get_supabase()
+
+    # 1. Remove every stored file for this user (best effort).
+    doc_keys = [
+        object_key(d.user_id, d.id, d.filename)
+        for d in db.query(Document).filter(Document.user_id == current_user.id).all()
+    ]
+    if doc_keys:
+        try:
+            supabase.storage.from_(STORAGE_BUCKET).remove(doc_keys)
+        except Exception:
+            pass
+
+    # 2. Remove the Supabase Auth user (best effort — the DB row goes regardless).
+    try:
+        supabase.auth.admin.delete_user(current_user.supabase_uid)
+    except Exception:
+        pass
+
+    # 3. Remove the local rows (ORM cascade drops documents / chunks / sessions / messages).
     db.delete(current_user)
     db.commit()
     return {"message": "User and all associated data deleted successfully"}

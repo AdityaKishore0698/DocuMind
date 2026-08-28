@@ -20,9 +20,8 @@ pgvector
 supabase
 google-genai
 
-# Auth
-bcrypt
-python-jose[cryptography]
+# Auth — verify Supabase Auth access tokens
+pyjwt[cryptography]
 
 # Document processing
 PyPDF2
