@@ -27,7 +27,8 @@ export default function ChatPanel({
   onSessionCreated,
   onToggleSidebar,
 }: Props) {
-  const { token } = useAuth();
+  const { session } = useAuth();
+  const token = session?.access_token ?? null;
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);

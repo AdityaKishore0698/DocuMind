@@ -5,7 +5,7 @@ import LoginView from "@/components/LoginView";
 import AppShell from "@/components/AppShell";
 
 export default function Home() {
-  const { token, ready } = useAuth();
+  const { session, ready } = useAuth();
 
   if (!ready) {
     return (
@@ -15,5 +15,5 @@ export default function Home() {
     );
   }
 
-  return token ? <AppShell /> : <LoginView />;
+  return session ? <AppShell /> : <LoginView />;
 }

@@ -41,7 +41,8 @@ export default function Sidebar({
   onSessionsChanged,
   onSessionRemoved,
 }: Props) {
-  const { token, logout } = useAuth();
+  const { session, signOut } = useAuth();
+  const token = session?.access_token ?? null;
   const [docs, setDocs] = useState<DocumentItem[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -130,7 +131,7 @@ export default function Sidebar({
     try {
       await deleteAccount(token);
     } finally {
-      logout();
+      signOut();
     }
   }
 
@@ -298,7 +299,7 @@ export default function Sidebar({
         {/* ---------- Account ---------- */}
         <div className="space-y-1 border-t border-border p-3 text-sm">
           <button
-            onClick={logout}
+            onClick={signOut}
             className="w-full rounded-md px-3 py-2 text-left text-muted-foreground transition hover:bg-surface-muted hover:text-foreground"
           >
             Sign out

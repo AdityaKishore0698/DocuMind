@@ -12,7 +12,8 @@ import Sidebar from "@/components/Sidebar";
 import ChatPanel from "@/components/ChatPanel";
 
 export default function AppShell() {
-  const { token } = useAuth();
+  const { session } = useAuth();
+  const token = session?.access_token ?? null;
   const [sessions, setSessions] = useState<ChatSessionItem[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<number | null>(null);
   const [messages, setMessages] = useState<ChatMessageItem[]>([]);

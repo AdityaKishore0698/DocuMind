@@ -1,4 +1,5 @@
 import { API_URL } from "./config";
+import { supabase } from "./supabase";
 
 /* ------------------------------------------------------------------ */
 /* Types                                                               */
@@ -56,9 +57,9 @@ async function toError(res: Response): Promise<ApiError> {
       /* ignore */
     }
   }
-  // A dead/expired token — let the app tear down the session.
+  // A dead/expired token — sign out so the app returns to the login screen.
   if (res.status === 401 && typeof window !== "undefined") {
-    window.dispatchEvent(new Event("documind:unauthorized"));
+    void supabase.auth.signOut();
   }
   return new ApiError(res.status, detail);
 }
