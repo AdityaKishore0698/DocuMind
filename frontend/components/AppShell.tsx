@@ -15,9 +15,11 @@ export default function AppShell() {
   const { session } = useAuth();
   const token = session?.access_token ?? null;
   const [sessions, setSessions] = useState<ChatSessionItem[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(true);
   const [activeSessionId, setActiveSessionId] = useState<number | null>(null);
   const [messages, setMessages] = useState<ChatMessageItem[]>([]);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [messagesLoading, setMessagesLoading] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const refreshSessions = useCallback(async () => {
     if (!token) return;
@@ -25,11 +27,12 @@ export default function AppShell() {
       setSessions(await listSessions(token));
     } catch {
       /* handled globally on 401 */
+    } finally {
+      setSessionsLoading(false);
     }
   }, [token]);
 
   useEffect(() => {
-    // Initial load — state is set only after the request resolves, not synchronously.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     refreshSessions();
   }, [refreshSessions]);
@@ -38,11 +41,14 @@ export default function AppShell() {
     async (id: number) => {
       if (!token) return;
       setActiveSessionId(id);
-      setSidebarOpen(false);
+      setDrawerOpen(false);
+      setMessagesLoading(true);
       try {
         setMessages(await getSessionMessages(token, id));
       } catch {
         setMessages([]);
+      } finally {
+        setMessagesLoading(false);
       }
     },
     [token],
@@ -51,7 +57,7 @@ export default function AppShell() {
   const newChat = useCallback(() => {
     setActiveSessionId(null);
     setMessages([]);
-    setSidebarOpen(false);
+    setDrawerOpen(false);
   }, []);
 
   const handleSessionCreated = useCallback(
@@ -71,12 +77,13 @@ export default function AppShell() {
   );
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-background">
+    <div className="flex h-dvh overflow-hidden bg-md-surface text-md-on-surface">
       <Sidebar
         sessions={sessions}
+        sessionsLoading={sessionsLoading}
         activeSessionId={activeSessionId}
-        open={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
         onNewChat={newChat}
         onOpenSession={openSession}
         onSessionsChanged={refreshSessions}
@@ -88,9 +95,10 @@ export default function AppShell() {
           key={activeSessionId ?? "new"}
           activeSessionId={activeSessionId}
           messages={messages}
+          messagesLoading={messagesLoading}
           setMessages={setMessages}
           onSessionCreated={handleSessionCreated}
-          onToggleSidebar={() => setSidebarOpen((v) => !v)}
+          onToggleDrawer={() => setDrawerOpen((v) => !v)}
         />
       </main>
     </div>

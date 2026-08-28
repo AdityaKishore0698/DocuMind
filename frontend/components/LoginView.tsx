@@ -1,7 +1,13 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { IconButton } from "@/components/ui/IconButton";
+import { OtpInput } from "@/components/ui/OtpInput";
+import { TextField } from "@/components/ui/TextField";
 
 type Mode = "signin" | "register" | "otp" | "reset";
 
@@ -18,70 +24,80 @@ export default function LoginView() {
   const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPw, setShowPw] = useState(false);
   const [code, setCode] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<null | "form" | "google" | "resend">(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  function reset(next: Mode) {
+  function go(next: Mode) {
     setMode(next);
     setError(null);
     setNotice(null);
     setCode("");
   }
 
-  async function run(fn: () => Promise<void>) {
+  async function run(kind: "form" | "google" | "resend", fn: () => Promise<void>) {
     setError(null);
-    setNotice(null);
-    setBusy(true);
+    setBusy(kind);
     try {
       await fn();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (mode === "signin") {
-      await run(() => signInWithPassword(email.trim(), password));
+      await run("form", () => signInWithPassword(email.trim(), password));
     } else if (mode === "register") {
-      await run(async () => {
+      await run("form", async () => {
         await signUpWithPassword(email.trim(), password);
-        setNotice(`We sent a 6-digit code to ${email.trim()}.`);
+        setNotice(`Enter the 6-digit code we sent to ${email.trim()}.`);
         setMode("otp");
       });
     } else if (mode === "otp") {
-      await run(() => verifySignupOtp(email.trim(), code.trim()));
+      await run("form", () => verifySignupOtp(email.trim(), code.trim()));
     } else {
-      await run(async () => {
+      await run("form", async () => {
         await sendPasswordReset(email.trim());
-        setNotice("Check your email for a reset link.");
+        setNotice("Check your email for a password-reset link.");
       });
     }
   }
 
-  return (
-    <div className="flex min-h-dvh items-center justify-center p-4">
-      <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-8 shadow-sm">
-        <div className="mb-6 text-center">
-          <h1 className="text-2xl font-semibold tracking-tight">DocuMind</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Chat with your documents.</p>
-        </div>
+  const isAuthTab = mode === "signin" || mode === "register";
 
-        {mode !== "otp" && mode !== "reset" && (
-          <div className="mb-6 grid grid-cols-2 gap-1 rounded-lg bg-surface-muted p-1 text-sm">
-            {(["signin", "register"] as Mode[]).map((m) => (
+  return (
+    <main className="flex min-h-dvh items-center justify-center bg-md-surface p-4">
+      <Card className="w-full max-w-[26rem] p-6 sm:p-9">
+        <header className="mb-7 text-center">
+          <h1 className="t-headline-m">DocuMind</h1>
+          <p className="t-body-m mt-1 text-md-on-surface-variant">
+            Chat with your documents.
+          </p>
+        </header>
+
+        {isAuthTab && (
+          <div
+            role="tablist"
+            aria-label="Authentication mode"
+            className="mb-7 grid grid-cols-2 rounded-full bg-md-surface-container-high p-1 t-label-l"
+          >
+            {(["signin", "register"] as const).map((m) => (
               <button
                 key={m}
+                role="tab"
+                aria-selected={mode === m}
                 type="button"
-                onClick={() => reset(m)}
-                className={`rounded-md px-3 py-1.5 font-medium transition ${
+                onClick={() => go(m)}
+                className={`rounded-full px-4 py-2 transition-colors ${
                   mode === m
-                    ? "bg-surface text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "bg-md-primary text-md-on-primary"
+                    : "text-md-on-surface-variant hover:text-md-on-surface"
                 }`}
               >
                 {m === "signin" ? "Sign in" : "Register"}
@@ -90,127 +106,139 @@ export default function LoginView() {
           </div>
         )}
 
-        <form onSubmit={onSubmit} className="space-y-4">
+        {!isAuthTab && (
+          <button
+            type="button"
+            onClick={() => go("signin")}
+            className="mb-5 inline-flex items-center gap-1 t-label-l text-md-on-surface-variant hover:text-md-on-surface"
+          >
+            <ArrowLeft size={16} /> Back to sign in
+          </button>
+        )}
+
+        <form onSubmit={onSubmit} className="space-y-5" noValidate>
           {mode !== "otp" && (
-            <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-muted-foreground">Email</span>
-              <input
-                type="email"
-                required
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
-              />
-            </label>
+            <TextField
+              label="Email address"
+              type="email"
+              required
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
           )}
 
-          {(mode === "signin" || mode === "register") && (
-            <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-muted-foreground">Password</span>
-              <input
-                type="password"
-                required
-                minLength={8}
-                autoComplete={mode === "signin" ? "current-password" : "new-password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
-              />
-            </label>
+          {isAuthTab && (
+            <TextField
+              label="Password"
+              type={showPw ? "text" : "password"}
+              required
+              minLength={8}
+              autoComplete={mode === "signin" ? "current-password" : "new-password"}
+              helperText={mode === "register" ? "At least 8 characters." : undefined}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              trailing={
+                <IconButton
+                  label={showPw ? "Hide password" : "Show password"}
+                  onClick={() => setShowPw((v) => !v)}
+                  tabIndex={-1}
+                >
+                  {showPw ? <EyeOff size={18} /> : <Eye size={18} />}
+                </IconButton>
+              }
+            />
           )}
 
           {mode === "otp" && (
-            <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-muted-foreground">
-                6-digit code sent to {email}
-              </span>
-              <input
-                inputMode="numeric"
-                pattern="[0-9]*"
-                maxLength={6}
-                required
-                autoFocus
-                value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-center text-lg tracking-[0.4em] outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
-              />
-            </label>
+            <div>
+              <p className="t-body-m mb-3 text-md-on-surface-variant">
+                6-digit code sent to <span className="text-md-on-surface">{email}</span>
+              </p>
+              <OtpInput value={code} onChange={setCode} aria-label="Email verification code" />
+            </div>
           )}
 
           {error && (
-            <p className="rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-500">{error}</p>
+            <p
+              role="alert"
+              className="rounded-lg bg-md-error-container px-3 py-2 t-body-m text-md-on-error-container"
+            >
+              {error}
+            </p>
           )}
           {notice && (
-            <p className="rounded-md bg-emerald-500/10 px-3 py-2 text-sm text-emerald-600">{notice}</p>
+            <p role="status" className="t-body-m text-md-on-surface-variant">
+              {notice}
+            </p>
           )}
 
-          <button
+          <Button
             type="submit"
-            disabled={busy}
-            className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-50"
+            size="lg"
+            fullWidth
+            loading={busy === "form"}
+            disabled={mode === "otp" && code.length < 6}
           >
-            {busy
-              ? "Please wait…"
-              : mode === "signin"
-                ? "Sign in"
-                : mode === "register"
-                  ? "Create account"
-                  : mode === "otp"
-                    ? "Verify & continue"
-                    : "Send reset link"}
-          </button>
+            {mode === "signin"
+              ? "Sign in"
+              : mode === "register"
+                ? "Create account"
+                : mode === "otp"
+                  ? "Verify & continue"
+                  : "Send reset link"}
+          </Button>
         </form>
 
         {mode === "otp" && (
-          <button
-            type="button"
-            onClick={() => run(() => resendSignupCode(email.trim()))}
-            disabled={busy}
-            className="mt-3 w-full text-center text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
+          <Button
+            variant="text"
+            fullWidth
+            loading={busy === "resend"}
+            onClick={() => run("resend", () => resendSignupCode(email.trim()))}
+            className="mt-2"
           >
             Resend code
-          </button>
+          </Button>
         )}
 
-        {(mode === "signin" || mode === "register") && (
+        {isAuthTab && (
           <>
-            <div className="my-5 flex items-center gap-3 text-xs text-muted-foreground">
-              <span className="h-px flex-1 bg-border" />
-              or
-              <span className="h-px flex-1 bg-border" />
+            <div className="my-6 flex items-center gap-3 t-label-m text-md-on-surface-variant">
+              <span className="h-px flex-1 bg-md-outline-variant" />
+              OR
+              <span className="h-px flex-1 bg-md-outline-variant" />
             </div>
-            <button
-              type="button"
-              onClick={() => run(signInWithGoogle)}
-              disabled={busy}
-              className="flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2.5 text-sm font-medium transition hover:bg-surface-muted disabled:opacity-50"
+            <Button
+              variant="outlined"
+              size="lg"
+              fullWidth
+              loading={busy === "google"}
+              leadingIcon={<GoogleMark />}
+              onClick={() => run("google", signInWithGoogle)}
             >
-              <GoogleMark /> Continue with Google
-            </button>
+              Continue with Google
+            </Button>
           </>
         )}
 
-        <div className="mt-5 text-center text-xs text-muted-foreground">
-          {mode === "signin" && (
-            <button type="button" onClick={() => reset("reset")} className="hover:text-foreground">
-              Forgot your password?
-            </button>
-          )}
-          {(mode === "otp" || mode === "reset") && (
-            <button type="button" onClick={() => reset("signin")} className="hover:text-foreground">
-              Back to sign in
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
+        {mode === "signin" && (
+          <button
+            type="button"
+            onClick={() => go("reset")}
+            className="mt-5 block w-full text-center t-label-l text-md-primary hover:underline"
+          >
+            Forgot your password?
+          </button>
+        )}
+      </Card>
+    </main>
   );
 }
 
 function GoogleMark() {
   return (
-    <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden>
+    <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden>
       <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.6l6.8-6.8C35.6 2.4 30.2 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.3 17.7 9.5 24 9.5z" />
       <path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.5 3-2.2 5.5-4.7 7.2l7.3 5.7c4.3-3.9 6.9-9.7 6.9-17.4z" />
       <path fill="#FBBC05" d="M10.5 28.3a14.6 14.6 0 0 1 0-8.6l-7.9-6.1a24 24 0 0 0 0 20.8l7.9-6.1z" />

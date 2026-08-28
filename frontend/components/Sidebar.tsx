@@ -1,6 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  FileText,
+  LogOut,
+  MessageSquarePlus,
+  MessageSquare,
+  Pencil,
+  Trash2,
+  Upload,
+  UserX,
+  X,
+} from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import {
   ChatSessionItem,
@@ -12,9 +23,16 @@ import {
   renameSession,
   uploadDocuments,
 } from "@/lib/api";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
+import { IconButton } from "@/components/ui/IconButton";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { useToast } from "@/components/ui/Toast";
+import { cn } from "@/lib/cn";
 
 interface Props {
   sessions: ChatSessionItem[];
+  sessionsLoading: boolean;
   activeSessionId: number | null;
   open: boolean;
   onClose: () => void;
@@ -24,15 +42,16 @@ interface Props {
   onSessionRemoved: (id: number) => void;
 }
 
-const STATUS_STYLES: Record<string, string> = {
-  completed: "text-emerald-500",
-  processing: "text-amber-500",
-  uploaded: "text-amber-500",
-  failed: "text-red-500",
+const STATUS: Record<string, { label: string; className: string }> = {
+  completed: { label: "Ready", className: "bg-md-primary-container text-md-on-primary-container" },
+  processing: { label: "Processing", className: "bg-md-secondary-container text-md-on-secondary-container" },
+  uploaded: { label: "Queued", className: "bg-md-secondary-container text-md-on-secondary-container" },
+  failed: { label: "Failed", className: "bg-md-error-container text-md-on-error-container" },
 };
 
 export default function Sidebar({
   sessions,
+  sessionsLoading,
   activeSessionId,
   open,
   onClose,
@@ -43,11 +62,15 @@ export default function Sidebar({
 }: Props) {
   const { session, signOut } = useAuth();
   const token = session?.access_token ?? null;
+  const toast = useToast();
+
   const [docs, setDocs] = useState<DocumentItem[]>([]);
+  const [docsLoading, setDocsLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [deleteAcctOpen, setDeleteAcctOpen] = useState(false);
+  const [deletingAcct, setDeletingAcct] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const refreshDocs = useCallback(async () => {
@@ -56,16 +79,16 @@ export default function Sidebar({
       setDocs(await listDocuments(token));
     } catch {
       /* 401 handled globally */
+    } finally {
+      setDocsLoading(false);
     }
   }, [token]);
 
   useEffect(() => {
-    // Initial load — state is set only after the request resolves, not synchronously.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     refreshDocs();
   }, [refreshDocs]);
 
-  // Poll while anything is still processing so statuses settle on their own.
   useEffect(() => {
     const pending = docs.some((d) => d.status !== "completed" && d.status !== "failed");
     if (!pending) return;
@@ -76,23 +99,30 @@ export default function Sidebar({
   async function handleFiles(files: FileList | null) {
     if (!token || !files || files.length === 0) return;
     setUploading(true);
-    setUploadError(null);
     try {
-      await uploadDocuments(token, Array.from(files));
+      const results = await uploadDocuments(token, Array.from(files));
+      toast.success(
+        results.length === 1
+          ? `“${results[0].filename}” uploaded — processing now.`
+          : `${results.length} files uploaded — processing now.`,
+      );
       await refreshDocs();
     } catch (err) {
-      setUploadError(err instanceof Error ? err.message : "Upload failed");
+      toast.error(err instanceof Error ? err.message : "Upload failed");
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }
 
-  async function removeDoc(id: number) {
+  async function removeDoc(id: number, name: string) {
     if (!token) return;
     setDocs((prev) => prev.filter((d) => d.id !== id));
     try {
       await deleteDocument(token, id);
+      toast.success(`Removed “${name}”.`);
+    } catch {
+      toast.error("Could not remove that document.");
     } finally {
       refreshDocs();
     }
@@ -120,55 +150,51 @@ export default function Sidebar({
     }
   }
 
-  async function handleDeleteAccount() {
+  async function confirmDeleteAccount() {
     if (!token) return;
-    if (
-      !window.confirm(
-        "Delete your account? This permanently removes all your documents and chats.",
-      )
-    )
-      return;
+    setDeletingAcct(true);
     try {
       await deleteAccount(token);
     } finally {
+      setDeletingAcct(false);
+      setDeleteAcctOpen(false);
       signOut();
     }
   }
 
   return (
     <>
-      {/* Mobile backdrop */}
       {open && (
         <div
-          className="fixed inset-0 z-20 bg-black/40 md:hidden"
+          className="fixed inset-0 z-20 md:hidden"
+          style={{ background: "var(--md-scrim)" }}
           onClick={onClose}
           aria-hidden
         />
       )}
 
-      <aside
-        className={`fixed inset-y-0 left-0 z-30 flex w-80 flex-col border-r border-border bg-surface transition-transform md:static md:translate-x-0 ${
-          open ? "translate-x-0" : "-translate-x-full"
-        }`}
+      <nav
+        aria-label="Documents and conversations"
+        className={cn(
+          "fixed inset-y-0 left-0 z-30 flex w-[22rem] max-w-[85vw] flex-col bg-md-surface-container-low",
+          "transition-transform duration-[250ms] ease-[cubic-bezier(0.2,0,0,1)]",
+          "md:static md:z-auto md:w-80 md:max-w-none md:translate-x-0 md:border-r md:border-md-outline-variant",
+          open ? "translate-x-0 elev-2" : "-translate-x-full",
+        )}
       >
-        <div className="flex items-center justify-between border-b border-border px-4 py-3.5">
-          <span className="text-sm font-semibold tracking-tight">DocuMind</span>
-          <button
-            onClick={onClose}
-            className="rounded-md p-1 text-muted-foreground hover:bg-surface-muted md:hidden"
-            aria-label="Close sidebar"
-          >
-            ✕
-          </button>
+        <div className="flex items-center justify-between px-4 pb-2 pt-4">
+          <span className="t-title-l">DocuMind</span>
+          <IconButton label="Close menu" className="md:hidden" onClick={onClose}>
+            <X size={20} />
+          </IconButton>
         </div>
 
-        <div className="flex-1 space-y-6 overflow-y-auto p-4 scrollbar-thin">
-          {/* ---------- Documents ---------- */}
-          <section>
-            <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <div className="flex-1 space-y-7 overflow-y-auto px-3 py-3 scrollbar-thin">
+          {/* Knowledge base */}
+          <section aria-labelledby="kb-heading">
+            <h2 id="kb-heading" className="px-2 t-label-m uppercase text-md-on-surface-variant">
               Knowledge base
             </h2>
-
             <input
               ref={fileInputRef}
               type="file"
@@ -177,117 +203,135 @@ export default function Sidebar({
               className="hidden"
               onChange={(e) => handleFiles(e.target.files)}
             />
-            <button
+            <Button
+              variant="tonal"
+              fullWidth
+              loading={uploading}
+              leadingIcon={<Upload size={18} />}
               onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
-              className="w-full rounded-lg border border-dashed border-border bg-background px-3 py-3 text-sm text-muted-foreground transition hover:border-primary hover:text-foreground disabled:opacity-50"
+              className="mt-2"
             >
-              {uploading ? "Uploading…" : "＋ Upload PDF / TXT"}
-            </button>
-            {uploadError && (
-              <p className="mt-2 text-xs text-red-500">{uploadError}</p>
-            )}
+              {uploading ? "Uploading…" : "Upload PDF or TXT"}
+            </Button>
 
-            <ul className="mt-3 space-y-1">
-              {docs.length === 0 && (
-                <li className="px-1 py-2 text-xs text-muted-foreground">
+            <ul className="mt-3 space-y-0.5">
+              {docsLoading &&
+                Array.from({ length: 3 }).map((_, i) => (
+                  <li key={i} className="px-2 py-2">
+                    <Skeleton className="h-4 w-full" />
+                  </li>
+                ))}
+              {!docsLoading && docs.length === 0 && (
+                <li className="px-2 py-2 t-body-m text-md-on-surface-variant">
                   No documents yet.
                 </li>
               )}
-              {docs.map((doc) => (
-                <li
-                  key={doc.id}
-                  className="group flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-surface-muted"
-                >
-                  <span className="shrink-0">📄</span>
-                  <span className="min-w-0 flex-1 truncate" title={doc.filename}>
-                    {doc.filename}
-                  </span>
-                  <span
-                    className={`shrink-0 text-[10px] uppercase ${
-                      STATUS_STYLES[doc.status] ?? "text-muted-foreground"
-                    }`}
+              {docs.map((doc) => {
+                const s = STATUS[doc.status] ?? {
+                  label: doc.status,
+                  className: "bg-md-surface-container-high text-md-on-surface-variant",
+                };
+                return (
+                  <li
+                    key={doc.id}
+                    className="group flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-md-on-surface/[0.05]"
                   >
-                    {doc.status}
-                  </span>
-                  <button
-                    onClick={() => removeDoc(doc.id)}
-                    className="shrink-0 text-muted-foreground opacity-0 transition group-hover:opacity-100 hover:text-red-500"
-                    aria-label={`Delete ${doc.filename}`}
-                  >
-                    ✕
-                  </button>
-                </li>
-              ))}
+                    <FileText size={16} className="shrink-0 text-md-on-surface-variant" />
+                    <span className="min-w-0 flex-1 truncate t-body-m" title={doc.filename}>
+                      {doc.filename}
+                    </span>
+                    <span className={cn("shrink-0 rounded-full px-2 py-0.5 t-label-s", s.className)}>
+                      {s.label}
+                    </span>
+                    <IconButton
+                      label={`Remove ${doc.filename}`}
+                      onClick={() => removeDoc(doc.id, doc.filename)}
+                      className="h-8 w-8 opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
+                    >
+                      <Trash2 size={15} />
+                    </IconButton>
+                  </li>
+                );
+              })}
             </ul>
           </section>
 
-          {/* ---------- Chat history ---------- */}
-          <section>
-            <div className="mb-2 flex items-center justify-between">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {/* Chats */}
+          <section aria-labelledby="chats-heading">
+            <div className="flex items-center justify-between px-2">
+              <h2 id="chats-heading" className="t-label-m uppercase text-md-on-surface-variant">
                 Chats
               </h2>
               <button
+                type="button"
                 onClick={onNewChat}
-                className="rounded-md px-2 py-1 text-xs font-medium text-primary hover:bg-surface-muted"
+                className="inline-flex items-center gap-1 rounded-full px-2 py-1 t-label-l text-md-primary hover:bg-md-primary/[0.08]"
               >
-                ＋ New
+                <MessageSquarePlus size={16} /> New
               </button>
             </div>
 
-            <ul className="space-y-1">
-              {sessions.length === 0 && (
-                <li className="px-1 py-2 text-xs text-muted-foreground">
+            <ul className="mt-2 space-y-0.5">
+              {sessionsLoading &&
+                Array.from({ length: 3 }).map((_, i) => (
+                  <li key={i} className="px-2 py-2">
+                    <Skeleton className="h-4 w-3/4" />
+                  </li>
+                ))}
+              {!sessionsLoading && sessions.length === 0 && (
+                <li className="px-2 py-2 t-body-m text-md-on-surface-variant">
                   No conversations yet.
                 </li>
               )}
-              {sessions.map((s) => (
-                <li key={s.id} className="group">
-                  {renamingId === s.id ? (
+              {sessions.map((sn) => (
+                <li key={sn.id} className="group">
+                  {renamingId === sn.id ? (
                     <input
                       autoFocus
                       value={renameValue}
                       onChange={(e) => setRenameValue(e.target.value)}
-                      onBlur={() => submitRename(s.id)}
+                      onBlur={() => submitRename(sn.id)}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter") submitRename(s.id);
+                        if (e.key === "Enter") submitRename(sn.id);
                         if (e.key === "Escape") setRenamingId(null);
                       }}
-                      className="w-full rounded-md border border-primary bg-background px-2 py-1.5 text-sm outline-none"
+                      className="w-full rounded-lg border border-md-primary bg-md-surface-container-highest px-2 py-2 t-body-m outline-none"
                     />
                   ) : (
                     <div
-                      className={`flex items-center gap-1 rounded-md px-2 py-1.5 text-sm ${
-                        activeSessionId === s.id
-                          ? "bg-surface-muted font-medium"
-                          : "hover:bg-surface-muted"
-                      }`}
+                      className={cn(
+                        "flex items-center gap-1 rounded-full pl-3 pr-1 py-1",
+                        activeSessionId === sn.id
+                          ? "bg-md-secondary-container text-md-on-secondary-container"
+                          : "hover:bg-md-on-surface/[0.05]",
+                      )}
                     >
+                      <MessageSquare size={16} className="shrink-0 opacity-70" />
                       <button
-                        onClick={() => onOpenSession(s.id)}
-                        className="min-w-0 flex-1 truncate text-left"
-                        title={s.title}
+                        type="button"
+                        onClick={() => onOpenSession(sn.id)}
+                        className="min-w-0 flex-1 truncate py-1 text-left t-body-m"
+                        title={sn.title}
                       >
-                        💬 {s.title}
+                        {sn.title}
                       </button>
-                      <button
+                      <IconButton
+                        label="Rename chat"
                         onClick={() => {
-                          setRenamingId(s.id);
-                          setRenameValue(s.title);
+                          setRenamingId(sn.id);
+                          setRenameValue(sn.title);
                         }}
-                        className="shrink-0 text-xs text-muted-foreground opacity-0 transition group-hover:opacity-100 hover:text-foreground"
-                        aria-label="Rename chat"
+                        className="h-8 w-8 opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
                       >
-                        ✎
-                      </button>
-                      <button
-                        onClick={() => removeSession(s.id)}
-                        className="shrink-0 text-xs text-muted-foreground opacity-0 transition group-hover:opacity-100 hover:text-red-500"
-                        aria-label="Delete chat"
+                        <Pencil size={14} />
+                      </IconButton>
+                      <IconButton
+                        label="Delete chat"
+                        onClick={() => removeSession(sn.id)}
+                        className="h-8 w-8 opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
                       >
-                        ✕
-                      </button>
+                        <Trash2 size={14} />
+                      </IconButton>
                     </div>
                   )}
                 </li>
@@ -296,22 +340,37 @@ export default function Sidebar({
           </section>
         </div>
 
-        {/* ---------- Account ---------- */}
-        <div className="space-y-1 border-t border-border p-3 text-sm">
+        {/* Account */}
+        <div className="border-t border-md-outline-variant p-2">
           <button
+            type="button"
             onClick={signOut}
-            className="w-full rounded-md px-3 py-2 text-left text-muted-foreground transition hover:bg-surface-muted hover:text-foreground"
+            className="flex w-full items-center gap-3 rounded-full px-3 py-2.5 t-label-l text-md-on-surface-variant hover:bg-md-on-surface/[0.06] hover:text-md-on-surface"
           >
-            Sign out
+            <LogOut size={18} /> Sign out
           </button>
           <button
-            onClick={handleDeleteAccount}
-            className="w-full rounded-md px-3 py-2 text-left text-red-500 transition hover:bg-red-500/10"
+            type="button"
+            onClick={() => setDeleteAcctOpen(true)}
+            className="flex w-full items-center gap-3 rounded-full px-3 py-2.5 t-label-l text-md-error hover:bg-md-error/[0.1]"
           >
-            Delete account
+            <UserX size={18} /> Delete account
           </button>
         </div>
-      </aside>
+      </nav>
+
+      <Dialog
+        open={deleteAcctOpen}
+        onClose={() => setDeleteAcctOpen(false)}
+        title="Delete your account?"
+        confirmLabel="Delete everything"
+        destructive
+        loading={deletingAcct}
+        onConfirm={confirmDeleteAccount}
+      >
+        This permanently removes your account, every uploaded document, and all chat
+        history. It cannot be undone.
+      </Dialog>
     </>
   );
 }

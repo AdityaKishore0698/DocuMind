@@ -158,16 +158,6 @@
   --color-md-success: var(--md-success);
   --color-md-warning: var(--md-warning);
 
-  /* legacy aliases — kept until the feature components are migrated */
-  --color-background: var(--md-surface);
-  --color-surface: var(--md-surface-container-low);
-  --color-surface-muted: var(--md-surface-container-high);
-  --color-border: var(--md-outline-variant);
-  --color-foreground: var(--md-on-surface);
-  --color-muted-foreground: var(--md-on-surface-variant);
-  --color-primary: var(--md-primary);
-  --color-primary-foreground: var(--md-on-primary);
-
   --font-sans: var(--font-roboto-flex), ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, monospace;
 }

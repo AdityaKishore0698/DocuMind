@@ -9,23 +9,29 @@ import {
 } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { Menu, Send, Square } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { ApiError, ChatMessageItem, streamChat } from "@/lib/api";
+import { IconButton } from "@/components/ui/IconButton";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { cn } from "@/lib/cn";
 
 interface Props {
   activeSessionId: number | null;
   messages: ChatMessageItem[];
+  messagesLoading: boolean;
   setMessages: Dispatch<SetStateAction<ChatMessageItem[]>>;
   onSessionCreated: (id: number) => void;
-  onToggleSidebar: () => void;
+  onToggleDrawer: () => void;
 }
 
 export default function ChatPanel({
   activeSessionId,
   messages,
+  messagesLoading,
   setMessages,
   onSessionCreated,
-  onToggleSidebar,
+  onToggleDrawer,
 }: Props) {
   const { session } = useAuth();
   const token = session?.access_token ?? null;
@@ -33,21 +39,27 @@ export default function ChatPanel({
   const [streaming, setStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const taRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({
-      top: scrollRef.current.scrollHeight,
-      behavior: "smooth",
-    });
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
   useEffect(() => () => abortRef.current?.abort(), []);
+
+  function autosize() {
+    const ta = taRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`;
+  }
 
   async function send() {
     const query = input.trim();
     if (!query || streaming || !token) return;
 
     setInput("");
+    requestAnimationFrame(autosize);
     setStreaming(true);
     setMessages((prev) => [
       ...prev,
@@ -78,18 +90,14 @@ export default function ChatPanel({
           },
         },
       );
-      if (!acc) writeAssistant(outcome.text || "*(no response)*");
-      if (!activeSessionId && outcome.sessionId) {
-        onSessionCreated(outcome.sessionId);
-      }
+      if (!acc) writeAssistant(outcome.text || "_(no response)_");
+      if (!activeSessionId && outcome.sessionId) onSessionCreated(outcome.sessionId);
     } catch (err) {
       if (controller.signal.aborted) {
         writeAssistant(acc ? `${acc}\n\n_(stopped)_` : "_(stopped)_");
       } else {
         const msg =
-          err instanceof ApiError
-            ? `⚠️ ${err.message}`
-            : "⚠️ Could not reach the API.";
+          err instanceof ApiError ? `⚠️ ${err.message}` : "⚠️ Could not reach the API.";
         writeAssistant(acc ? `${acc}\n\n${msg}` : msg);
       }
     } finally {
@@ -98,37 +106,32 @@ export default function ChatPanel({
     }
   }
 
-  function stop() {
-    abortRef.current?.abort();
-  }
-
   return (
     <>
-      <header className="flex items-center gap-3 border-b border-border bg-surface px-4 py-3">
-        <button
-          onClick={onToggleSidebar}
-          className="rounded-md p-1.5 text-muted-foreground hover:bg-surface-muted md:hidden"
-          aria-label="Toggle sidebar"
-        >
-          ☰
-        </button>
-        <h1 className="truncate text-sm font-medium">
+      <header className="flex items-center gap-2 border-b border-md-outline-variant bg-md-surface px-3 py-2 md:px-4">
+        <IconButton label="Open menu" className="md:hidden" onClick={onToggleDrawer}>
+          <Menu size={20} />
+        </IconButton>
+        <h1 className="min-w-0 truncate t-title-m">
           {activeSessionId ? "Conversation" : "New chat"}
         </h1>
       </header>
 
-      <div
-        ref={scrollRef}
-        className="flex-1 overflow-y-auto scrollbar-thin"
-      >
-        <div className="mx-auto flex max-w-3xl flex-col gap-5 px-4 py-6">
-          {messages.length === 0 && (
-            <div className="mt-20 text-center text-muted-foreground">
-              <p className="text-lg font-medium text-foreground">
-                Ask anything about your documents
-              </p>
-              <p className="mt-1 text-sm">
-                Upload files in the sidebar, then start a conversation.
+      <div ref={scrollRef} className="flex-1 overflow-x-hidden overflow-y-auto scrollbar-thin">
+        <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 py-6">
+          {messagesLoading &&
+            Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className={cn("flex gap-3", i % 2 === 1 && "flex-row-reverse")}>
+                <Skeleton className="h-8 w-8" rounded="rounded-full" />
+                <Skeleton className="h-16 w-2/3" rounded="rounded-2xl" />
+              </div>
+            ))}
+
+          {!messagesLoading && messages.length === 0 && (
+            <div className="mt-16 text-center sm:mt-24">
+              <h2 className="t-headline-s">Ask anything about your documents</h2>
+              <p className="mt-2 t-body-m text-md-on-surface-variant">
+                Upload files from the menu, then start a conversation.
               </p>
             </div>
           )}
@@ -149,48 +152,56 @@ export default function ChatPanel({
         </div>
       </div>
 
-      <div className="border-t border-border bg-surface px-4 py-3">
+      <div className="border-t border-md-outline-variant bg-md-surface px-4 py-3">
         <form
           onSubmit={(e) => {
             e.preventDefault();
             send();
           }}
-          className="mx-auto flex max-w-3xl items-end gap-2"
+          className="mx-auto flex w-full max-w-3xl items-end gap-2"
         >
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                send();
-              }
-            }}
-            rows={1}
-            placeholder="Message DocuMind…"
-            className="max-h-40 min-h-[44px] flex-1 resize-none rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
-          />
+          <div className="flex min-w-0 flex-1 items-end rounded-3xl bg-md-surface-container-high px-4 py-1.5 focus-within:outline focus-within:outline-2 focus-within:outline-md-primary">
+            <textarea
+              ref={taRef}
+              value={input}
+              rows={1}
+              onChange={(e) => {
+                setInput(e.target.value);
+                autosize();
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  send();
+                }
+              }}
+              placeholder="Message DocuMind…"
+              aria-label="Message"
+              className="max-h-40 min-h-[36px] flex-1 resize-none bg-transparent py-2 t-body-l text-md-on-surface outline-none placeholder:text-md-on-surface-variant"
+            />
+          </div>
           {streaming ? (
-            <button
+            <IconButton
+              label="Stop generating"
+              variant="tonal"
               type="button"
-              onClick={stop}
-              className="h-11 shrink-0 rounded-xl border border-border px-4 text-sm font-medium hover:bg-surface-muted"
+              onClick={() => abortRef.current?.abort()}
             >
-              Stop
-            </button>
+              <Square size={18} fill="currentColor" />
+            </IconButton>
           ) : (
-            <button
+            <IconButton
+              label="Send message"
+              variant="filled"
               type="submit"
               disabled={!input.trim()}
-              className="h-11 shrink-0 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-40"
             >
-              Send
-            </button>
+              <Send size={18} />
+            </IconButton>
           )}
         </form>
-        <p className="mx-auto mt-2 max-w-3xl text-center text-[11px] text-muted-foreground">
-          Answers are generated from your uploaded documents and may be
-          incomplete.
+        <p className="mx-auto mt-2 max-w-3xl text-center t-label-s text-md-on-surface-variant">
+          Answers are generated from your uploaded documents and may be incomplete.
         </p>
       </div>
     </>
@@ -208,32 +219,37 @@ function Message({
 }) {
   const isUser = role === "user";
   return (
-    <div className={`flex gap-3 ${isUser ? "flex-row-reverse" : ""}`}>
+    <div className={cn("flex min-w-0 gap-3", isUser && "flex-row-reverse")}>
       <div
-        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+        className={cn(
+          "grid h-8 w-8 shrink-0 place-items-center rounded-full t-label-m",
           isUser
-            ? "bg-primary text-primary-foreground"
-            : "bg-surface-muted text-foreground"
-        }`}
+            ? "bg-md-primary text-md-on-primary"
+            : "bg-md-secondary-container text-md-on-secondary-container",
+        )}
+        aria-hidden
       >
         {isUser ? "You" : "AI"}
       </div>
       <div
-        className={`max-w-[85%] break-words rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+        className={cn(
+          "min-w-0 max-w-[85%] overflow-hidden break-words rounded-2xl px-4 py-2.5 t-body-l leading-relaxed",
           isUser
-            ? "whitespace-pre-wrap bg-primary text-primary-foreground"
-            : "border border-border bg-surface"
-        }`}
+            ? "whitespace-pre-wrap bg-md-primary text-md-on-primary"
+            : "bg-md-surface-container text-md-on-surface",
+        )}
       >
         {isUser ? (
           content
         ) : (
-          <div className="markdown">
+          <div className="markdown" aria-live={pending ? "polite" : undefined}>
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+            {pending && (
+              <span className="ml-0.5 inline-block motion-safe:animate-blink" aria-hidden>
+                ▋
+              </span>
+            )}
           </div>
-        )}
-        {pending && (
-          <span className="animate-blink ml-0.5 inline-block">▋</span>
         )}
       </div>
     </div>
