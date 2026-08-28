@@ -1,6 +1,6 @@
 # DocuMind 🧠
 
-DocuMind is an advanced Multimodal Retrieval-Augmented Generation (RAG) engine built for secure, local, and cloud-hybrid document chat. It allows you to upload personal documents (PDFs, TXTs) and chat intelligently with them using state-of-the-art open-source LLMs like Llama 3.1.
+DocuMind is an advanced Multimodal Retrieval-Augmented Generation (RAG) engine built for secure, multi-tenant document chat. It allows you to upload personal documents (PDFs, TXTs) and chat intelligently with them, powered by the Google Gemini API.
 
 ## Features
 * **Multi-Tenant Security:** Secure JWT authentication and bcrypt password hashing. User data and chat histories are strictly isolated.
@@ -10,42 +10,74 @@ DocuMind is an advanced Multimodal Retrieval-Augmented Generation (RAG) engine b
 * **Intelligent Search:** Powered by `pgvector` for rapid cosine-similarity semantic search across document chunks.
 
 ## Tech Stack
-* **Frontend:** Streamlit
+* **Frontend:** Next.js 16 (App Router) · TypeScript · Tailwind CSS — in `frontend/`
 * **Backend:** FastAPI, Python 3.11
 * **Database:** PostgreSQL (with `pgvector` extension)
 * **Task Queue:** Celery & Redis
-* **AI Engine:** Ollama (Llama 3.1 8B, Nomic-Embed-Text)
+* **AI Provider:** Google Gemini API via the `google-genai` SDK — `gemini-3.6-flash` (chat), `gemini-embedding-2` (768-dim embeddings)
+
+> `ui/` contains the original Streamlit prototype, kept for reference. The Next.js app in `frontend/` is the current UI.
+
+## Configuration
+
+**Backend** — copy `.env.example` to `.env` and fill in:
+
+| Variable | Purpose | Default |
+| --- | --- | --- |
+| `GEMINI_API_KEY` | Google Gemini API key (required, used by API + Worker) | — |
+| `CHAT_MODEL` | Gemini chat model | `gemini-3.6-flash` |
+| `EMBEDDING_MODEL` | Gemini embedding model | `gemini-embedding-2` |
+| `SECRET_KEY` | JWT signing key | dev fallback |
+| `FRONTEND_ORIGINS` | CORS allow-list for the browser app (comma-separated, or `*`) | `http://localhost:3000,http://localhost:3001` |
+
+**Frontend** — `frontend/.env.local`:
+
+| Variable | Purpose | Default |
+| --- | --- | --- |
+| `NEXT_PUBLIC_API_URL` | Base URL of the FastAPI backend | `http://localhost:8000` |
+
+`.env` and `.env*.local` are git-ignored; commit only the `.example` templates.
+
+## Running locally
+
+```bash
+# 1. Backend (API, Worker, Redis, Postgres)
+docker compose up -d --build          # API on http://localhost:8000
+
+# 2. Frontend
+cd frontend
+npm install
+npm run dev                           # app on http://localhost:3000
+```
 
 ## Architecture
 
 ```mermaid
 graph TD
-    subgraph AWS Cloud [AWS EC2 Instance]
-        UI[Streamlit UI]
+    User((User Browser))
+
+    subgraph Next.js
+        FE[Next.js App<br/>chat + upload sidebar]
+    end
+
+    subgraph Docker Compose
         API[FastAPI Backend]
         Worker[Celery Worker]
         DB[(PostgreSQL + pgvector)]
         Redis[(Redis Broker)]
-        
-        UI <-->|REST / SSE| API
+
         API <-->|SQL| DB
         API -->|Task| Redis
         Redis -->|Consume| Worker
         Worker <-->|SQL| DB
     end
 
-    subgraph Lab Network [On-Premise GPU Server]
-        Ollama[Ollama AI Engine]
-        Llama[Llama 3.1 8B]
-        Embed[nomic-embed-text]
-        Ollama --- Llama
-        Ollama --- Embed
-    end
-    
-    API <==>|Reverse SSH Tunnel| Ollama
-    Worker <==>|Reverse SSH Tunnel| Ollama
-    
-    User((User Browser)) <-->|HTTP:80| UI
+    Gemini[Google Gemini API<br/>gemini-3.6-flash · gemini-embedding-2]
+
+    User <-->|HTTPS| FE
+    FE <==>|REST + streamed chat, Bearer JWT| API
+    API <==>|HTTPS: chat streaming + query embedding| Gemini
+    Worker <==>|HTTPS: chunk embedding| Gemini
 ```
 
 ## Screenshots

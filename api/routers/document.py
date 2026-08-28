@@ -11,7 +11,7 @@ from core.dependencies import get_current_user
 
 router = APIRouter()
 
-celery_app = Celery("worker", broker=os.getenv("CELERY_BROKER_URL", "redis://redis:6379/0"))
+celery_app = Celery("worker", broker=os.getenv("REDIS_URL", "redis://redis:6379/0"))
 
 @router.post("/upload")
 async def upload_documents(

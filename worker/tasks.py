@@ -1,13 +1,23 @@
 import os
-import requests
 import PyPDF2
+from google import genai
+from google.genai import types
 from celery_app import celery_app
 from database import SessionLocal
 from models import Document, DocumentChunk
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "nomic-embed-text")
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "gemini-embedding-2")
+EMBEDDING_DIM = 768
+
+_genai_client = None
+
+
+def get_genai_client() -> genai.Client:
+    global _genai_client
+    if _genai_client is None:
+        _genai_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+    return _genai_client
 
 def extract_text(filepath: str) -> str:
     _, ext = os.path.splitext(filepath)
@@ -26,12 +36,12 @@ def extract_text(filepath: str) -> str:
             return f.read()
 
 def get_embedding(text: str) -> list[float]:
-    response = requests.post(
-        f"{OLLAMA_BASE_URL}/api/embeddings",
-        json={"model": OLLAMA_MODEL, "prompt": text}
+    result = get_genai_client().models.embed_content(
+        model=EMBEDDING_MODEL,
+        contents=text,
+        config=types.EmbedContentConfig(output_dimensionality=EMBEDDING_DIM),
     )
-    response.raise_for_status()
-    return response.json()["embedding"]
+    return result.embeddings[0].values
 
 @celery_app.task
 def process_document(document_id: int, filename: str):

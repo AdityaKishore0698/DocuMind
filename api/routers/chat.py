@@ -1,7 +1,8 @@
 import os
-import json
-import requests
 from typing import Optional, List
+
+from google import genai
+from google.genai import types
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -13,6 +14,21 @@ from core.dependencies import get_current_user
 
 router = APIRouter()
 
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "gemini-embedding-2")
+CHAT_MODEL = os.getenv("CHAT_MODEL", "gemini-3.6-flash")
+EMBEDDING_DIM = 768
+
+# Instantiated lazily so the app (and test suite) can import without GEMINI_API_KEY set.
+_genai_client: Optional[genai.Client] = None
+
+
+def get_genai_client() -> genai.Client:
+    global _genai_client
+    if _genai_client is None:
+        _genai_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+    return _genai_client
+
+
 class ChatRequest(BaseModel):
     query: str
     session_id: Optional[int] = None
@@ -20,14 +36,13 @@ class ChatRequest(BaseModel):
 class SessionCreate(BaseModel):
     title: str
 
-def get_embedding(text: str):
-    OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
-    response = requests.post(
-        f"{OLLAMA_BASE_URL}/api/embeddings",
-        json={"model": "nomic-embed-text", "prompt": text}
+def get_embedding(text: str) -> List[float]:
+    result = get_genai_client().models.embed_content(
+        model=EMBEDDING_MODEL,
+        contents=text,
+        config=types.EmbedContentConfig(output_dimensionality=EMBEDDING_DIM),
     )
-    response.raise_for_status()
-    return response.json().get("embedding")
+    return result.embeddings[0].values
 
 @router.post("/sessions")
 def create_session(session: SessionCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -99,28 +114,36 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db), current_user
     
     # Load past history
     history = db.query(ChatMessage).filter(ChatMessage.session_id == session_id).order_by(ChatMessage.created_at).all()
-    history_text = ""
-    for msg in history[:-1]: # exclude the current one we just added
-        history_text += f"{msg.role.capitalize()}: {msg.content}\n"
-    
-    def generate_response():
-        OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
-        prompt = f"Context from documents:\n{context}\n\nPast Chat History:\n{history_text}\n\nUser: {request.query}\n\nAssistant:"
-        response = requests.post(
-            f"{OLLAMA_BASE_URL}/api/generate",
-            json={"model": "llama3.1:8b", "prompt": prompt, "stream": True},
-            stream=True
+
+    system_prompt = (
+        "You are DocuMind, an assistant that answers questions using the user's "
+        "uploaded documents. Rely on the context below; if it does not contain the "
+        "answer, say so.\n\n"
+        f"Context from documents:\n{context}"
+    )
+
+    # Gemini expects "user" / "model" roles; our history stores "user" / "assistant".
+    contents: List[types.Content] = [
+        types.Content(
+            role="model" if msg.role == "assistant" else "user",
+            parts=[types.Part(text=msg.content)],
         )
-        
+        for msg in history[:-1]  # exclude the current query we just added
+    ]
+    contents.append(types.Content(role="user", parts=[types.Part(text=request.query)]))
+
+    async def generate_response():
         full_response = ""
         try:
-            for line in response.iter_lines():
-                if line:
-                    data = json.loads(line)
-                    if not data.get("done"):
-                        piece = data.get("response", "")
-                        full_response += piece
-                        yield piece
+            stream = await get_genai_client().aio.models.generate_content_stream(
+                model=CHAT_MODEL,
+                contents=contents,
+                config=types.GenerateContentConfig(system_instruction=system_prompt),
+            )
+            async for chunk in stream:
+                if chunk.text:
+                    full_response += chunk.text
+                    yield chunk.text
         finally:
             if full_response:
                 # Save assistant message to DB even if aborted early

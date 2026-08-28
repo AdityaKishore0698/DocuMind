@@ -6,7 +6,7 @@ pgvector
 python-multipart
 celery
 redis
-requests
+google-genai
 bcrypt
 python-jose[cryptography]
 pytest

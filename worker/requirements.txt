@@ -3,6 +3,6 @@ redis
 sqlalchemy
 psycopg2-binary
 pgvector
-requests
+google-genai
 PyPDF2
 langchain-text-splitters

@@ -20,6 +20,6 @@ class DocumentChunk(Base):
     id = Column(Integer, primary_key=True, index=True)
     document_id = Column(Integer, ForeignKey("documents.id"))
     content = Column(Text)
-    embedding = Column(Vector(768))
+    embedding = Column(Vector(768))  # Gemini gemini-embedding-2 (output_dimensionality=768)
 
     document = relationship("Document", back_populates="chunks")

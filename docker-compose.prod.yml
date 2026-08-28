@@ -1,27 +1,10 @@
 version: '3.8'
 
+# Self-hosted production stack (single host). Stateful services are managed:
+# DATABASE_URL -> Supabase Postgres + pgvector, REDIS_URL -> Upstash Redis.
+# For the Vercel + Render/Koyeb hybrid deployment, see render.yaml instead.
+
 services:
-  db:
-    image: pgvector/pgvector:pg16
-    environment:
-      POSTGRES_USER: rag_user
-      POSTGRES_PASSWORD: rag_password
-      POSTGRES_DB: rag_engine
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U rag_user"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  redis:
-    image: redis:alpine
-    ports:
-      - "6379:6379"
-
   api:
     build: ./api
     ports:
@@ -29,32 +12,23 @@ services:
     volumes:
       - shared_data:/shared
     environment:
-      - DATABASE_URL=postgresql://rag_user:rag_password@db:5432/rag_engine
-      - REDIS_URL=redis://redis:6379/0
-      - OLLAMA_BASE_URL=http://host.docker.internal:11434
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_started
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - CHAT_MODEL=${CHAT_MODEL:-gemini-3.6-flash}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-gemini-embedding-2}
+      - SECRET_KEY=${SECRET_KEY}
+      - FRONTEND_ORIGINS=${FRONTEND_ORIGINS}
 
   worker:
     build: ./worker
     volumes:
       - shared_data:/shared
     environment:
-      - DATABASE_URL=postgresql://rag_user:rag_password@db:5432/rag_engine
-      - REDIS_URL=redis://redis:6379/0
-      - OLLAMA_BASE_URL=http://host.docker.internal:11434
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_started
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-gemini-embedding-2}
 
   ui:
     build: ./ui
@@ -66,5 +40,4 @@ services:
       - api
 
 volumes:
-  postgres_data:
   shared_data:

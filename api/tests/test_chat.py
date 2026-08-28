@@ -1,8 +1,7 @@
 import pytest
-from unittest.mock import patch
 
-@patch("routers.chat.requests.post")
-def test_create_session(mock_post, client):
+
+def test_create_session(client):
     client.post(
         "/auth/register",
         json={"username": "chatuser", "email": "chat@example.com", "password": "securepassword"}
