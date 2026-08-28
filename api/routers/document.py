@@ -11,7 +11,16 @@ from core.dependencies import get_current_user
 
 router = APIRouter()
 
-celery_app = Celery("worker", broker=os.getenv("REDIS_URL", "redis://redis:6379/0"))
+
+def _redis_url() -> str:
+    # kombu needs an explicit ssl_cert_reqs on rediss:// (TLS) broker URLs.
+    url = os.getenv("REDIS_URL", "redis://redis:6379/0")
+    if url.startswith("rediss://") and "ssl_cert_reqs" not in url:
+        url += ("&" if "?" in url else "?") + "ssl_cert_reqs=required"
+    return url
+
+
+celery_app = Celery("worker", broker=_redis_url())
 
 @router.post("/upload")
 async def upload_documents(
