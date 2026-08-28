@@ -6,17 +6,15 @@ import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { IconButton } from "@/components/ui/IconButton";
-import { OtpInput } from "@/components/ui/OtpInput";
 import { TextField } from "@/components/ui/TextField";
 
-type Mode = "signin" | "register" | "otp" | "reset";
+type Mode = "signin" | "register" | "reset";
 
 export default function LoginView() {
   const {
+    emailConfirmed,
     signInWithPassword,
     signUpWithPassword,
-    verifySignupOtp,
-    resendSignupCode,
     signInWithGoogle,
     sendPasswordReset,
   } = useAuth();
@@ -25,8 +23,7 @@ export default function LoginView() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
-  const [code, setCode] = useState("");
-  const [busy, setBusy] = useState<null | "form" | "google" | "resend">(null);
+  const [busy, setBusy] = useState<null | "form" | "google">(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -34,10 +31,9 @@ export default function LoginView() {
     setMode(next);
     setError(null);
     setNotice(null);
-    setCode("");
   }
 
-  async function run(kind: "form" | "google" | "resend", fn: () => Promise<void>) {
+  async function run(kind: "form" | "google", fn: () => Promise<void>) {
     setError(null);
     setBusy(kind);
     try {
@@ -55,12 +51,16 @@ export default function LoginView() {
       await run("form", () => signInWithPassword(email.trim(), password));
     } else if (mode === "register") {
       await run("form", async () => {
-        await signUpWithPassword(email.trim(), password);
-        setNotice(`Enter the 6-digit code we sent to ${email.trim()}.`);
-        setMode("otp");
+        const { needsConfirmation } = await signUpWithPassword(
+          email.trim(),
+          password,
+        );
+        setNotice(
+          needsConfirmation
+            ? "Account created. Please check your email and click the confirmation link to verify your account."
+            : "Account created — signing you in…",
+        );
       });
-    } else if (mode === "otp") {
-      await run("form", () => verifySignupOtp(email.trim(), code.trim()));
     } else {
       await run("form", async () => {
         await sendPasswordReset(email.trim());
@@ -70,6 +70,11 @@ export default function LoginView() {
   }
 
   const isAuthTab = mode === "signin" || mode === "register";
+  const shownNotice =
+    notice ??
+    (emailConfirmed && mode === "signin"
+      ? "Your email is confirmed. Please sign in to continue."
+      : null);
 
   return (
     <main className="flex min-h-dvh items-center justify-center bg-md-surface p-4">
@@ -106,7 +111,7 @@ export default function LoginView() {
           </div>
         )}
 
-        {!isAuthTab && (
+        {mode === "reset" && (
           <button
             type="button"
             onClick={() => go("signin")}
@@ -117,16 +122,14 @@ export default function LoginView() {
         )}
 
         <form onSubmit={onSubmit} className="space-y-5" noValidate>
-          {mode !== "otp" && (
-            <TextField
-              label="Email address"
-              type="email"
-              required
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          )}
+          <TextField
+            label="Email address"
+            type="email"
+            required
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
 
           {isAuthTab && (
             <TextField
@@ -150,15 +153,6 @@ export default function LoginView() {
             />
           )}
 
-          {mode === "otp" && (
-            <div>
-              <p className="t-body-m mb-3 text-md-on-surface-variant">
-                6-digit code sent to <span className="text-md-on-surface">{email}</span>
-              </p>
-              <OtpInput value={code} onChange={setCode} aria-label="Email verification code" />
-            </div>
-          )}
-
           {error && (
             <p
               role="alert"
@@ -167,40 +161,20 @@ export default function LoginView() {
               {error}
             </p>
           )}
-          {notice && (
+          {shownNotice && !error && (
             <p role="status" className="t-body-m text-md-on-surface-variant">
-              {notice}
+              {shownNotice}
             </p>
           )}
 
-          <Button
-            type="submit"
-            size="lg"
-            fullWidth
-            loading={busy === "form"}
-            disabled={mode === "otp" && code.length < 6}
-          >
+          <Button type="submit" size="lg" fullWidth loading={busy === "form"}>
             {mode === "signin"
               ? "Sign in"
               : mode === "register"
                 ? "Create account"
-                : mode === "otp"
-                  ? "Verify & continue"
-                  : "Send reset link"}
+                : "Send reset link"}
           </Button>
         </form>
-
-        {mode === "otp" && (
-          <Button
-            variant="text"
-            fullWidth
-            loading={busy === "resend"}
-            onClick={() => run("resend", () => resendSignupCode(email.trim()))}
-            className="mt-2"
-          >
-            Resend code
-          </Button>
-        )}
 
         {isAuthTab && (
           <>
