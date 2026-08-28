@@ -1,11 +1,11 @@
-# DocuMind 🧠
+# DocuMind
 
 DocuMind is a multi-tenant, Retrieval-Augmented Generation (RAG) platform for secure
 document chat. Upload personal documents (PDF / TXT), and chat with an LLM that answers
 strictly from *your* knowledge base — with token-by-token streaming, per-user isolation,
 and cascading data deletion.
 
-> ### ⏱️ Recruiter Notice — Cold-Start Disclaimer
+> ### Notice — Cold-Start Disclaimer
 >
 > The backend runs on **Render's free tier**, which **spins the server down after a period
 > of inactivity**. If the app hasn't been used recently, the **first request (login or
@@ -24,7 +24,7 @@ object storage, and message broker are all managed free tiers.
 
 ```mermaid
 graph TD
-    User((User / Recruiter<br/>Browser))
+    User((User<br/>Browser))
 
     subgraph Vercel
         FE["Next.js 16 App Router<br/>chat UI · upload sidebar · JWT in localStorage"]
@@ -172,7 +172,6 @@ npm run dev                      # http://localhost:3000
 
 ## Screenshots
 
-*(Replace the placeholder links with real screenshots.)*
 
 ### 1. Chat Interface
 ![Chat Interface](docs/chat_interface.png)
