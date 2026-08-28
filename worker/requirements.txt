@@ -4,5 +4,6 @@ sqlalchemy
 psycopg2-binary
 pgvector
 google-genai
+supabase
 PyPDF2
 langchain-text-splitters

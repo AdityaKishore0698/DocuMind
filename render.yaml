@@ -31,6 +31,11 @@ envVarGroups:
       # Upstash Redis (rediss://...) — Celery broker + result backend.
       - key: REDIS_URL
         sync: false
+      # Supabase Storage — document files (bucket "documents"). Used by API + Worker.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
       - key: GEMINI_API_KEY
         sync: false
       - key: EMBEDDING_MODEL
