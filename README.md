@@ -186,7 +186,7 @@ npm run dev                      # http://localhost:3000
 ## Screenshots
 
 ### 1. Login / Registration
-![Login Screen](docs/login_screen.png)
+<img src="docs/login_screen.png"/>
 
 ### 2. Chat Interface
-![Chat Interface](docs/chat_interface.png)
+<img src="docs/chat_interface.png"/>
